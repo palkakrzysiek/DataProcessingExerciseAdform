@@ -18,25 +18,6 @@ class WindowedElementsTest extends AnyFunSuite with Matchers {
 
   val windowSize  = Duration.ofMinutes(1)
   val windowSlide = Duration.ofMinutes(1)
-  def mkWindowedElement(LazyListNum: Long) =
-    WindowedElement(Window(windowSize, windowSlide, LazyListNum), LazyList(LazyListNum))
-  test("align windows") {
-//    alignWindows(LazyList.empty, LazyList.empty) shouldEqual LazyList.empty
-//    alignWindows(LazyList.empty, LazyList(mkWindowedElement(1))) shouldEqual LazyList.empty
-//    alignWindows(LazyList(mkWindowedElement(1)), LazyList.empty) shouldEqual LazyList.empty
-    alignWindows(LazyList(mkWindowedElement(1), mkWindowedElement(2)), LazyList(mkWindowedElement(2))) shouldEqual LazyList(
-      (LazyList(2), LazyList(2))
-    )
-    alignWindows(LazyList(mkWindowedElement(2), mkWindowedElement(3)), LazyList(mkWindowedElement(2))) shouldEqual LazyList(
-      (LazyList(2), LazyList(2))
-    )
-    alignWindows(LazyList(mkWindowedElement(2)), LazyList(mkWindowedElement(1), mkWindowedElement(2))) shouldEqual LazyList(
-      (LazyList(2), LazyList(2))
-    )
-    alignWindows(LazyList(mkWindowedElement(2)), LazyList(mkWindowedElement(2), mkWindowedElement(3))) shouldEqual LazyList(
-      (LazyList(2), LazyList(2))
-    )
-  }
 
   import Window._
   private case class Range(start: LocalDateTime, end: LocalDateTime)

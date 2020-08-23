@@ -4,7 +4,7 @@ import java.time.{ Duration, LocalDateTime }
 
 import com.kpalka.dataprocessingexercise.Window.globalStartTimestamp
 
-import scala.annotation.tailrec
+import scala.collection.immutable.LazyList.toDeferrer
 import scala.collection.immutable.Queue
 
 case class WindowedElement[A](window: Window, elements: Seq[A])
@@ -19,7 +19,7 @@ case class Window(size: Duration, slide: Duration, seqNumber: Long) {
 }
 
 object Window {
-  val globalStartTimestamp: LocalDateTime = LocalDateTime.MIN
+  val globalStartTimestamp: LocalDateTime = LocalDateTime.of(2010, 1, 1, 0, 0)
   def windowsContainingTimestamp(slide: Duration, size: Duration, currentTimestamp: LocalDateTime): Seq[Window] = {
 
     val firstWindowTimestampOffset =
@@ -40,8 +40,8 @@ object Window {
 object WindowedElements {
 
   def alignWindows[A, B](
-    as: LazyList[WindowedElement[A]],
-    bs: LazyList[WindowedElement[B]]
+    as: => LazyList[WindowedElement[A]],
+    bs: => LazyList[WindowedElement[B]]
   ): LazyList[WindowedElement[(Seq[A], Seq[B])]] =
     if (as.isEmpty || bs.isEmpty) LazyList.empty
     else
@@ -66,24 +66,29 @@ object WindowedElements {
       .toSeq
       .sortBy(_.window.seqNumber)
 
+  private case class WindowingState[A](
+    windowsBeingProcessed: Seq[WindowedElement[A]],
+    windowsToBeEmitted: Seq[WindowedElement[A]]
+  )
+  private object WindowingState {
+    def empty[A]: WindowingState[A] = WindowingState(
+      Seq.empty[WindowedElement[A]],
+      Seq.empty[WindowedElement[A]]
+    )
+  }
   def toWindowedElements[A](
     as: LazyList[A]
   )(timestampExtractor: A => LocalDateTime, size: Duration, slide: Duration): LazyList[WindowedElement[A]] = {
-    def loop(windowsBeingProcessed: Seq[WindowedElement[A]], queue: LazyList[A]): LazyList[WindowedElement[A]] =
-      if (queue.isEmpty) LazyList.empty
-      else
-        queue match {
-          case head #:: tail =>
-            val timestamp                = timestampExtractor(head)
-            val windows                  = Window.windowsContainingTimestamp(slide, size, timestamp)
-            val windowedElements         = windows.map(window => WindowedElement(window, Seq(head)))
-            val combinedWindowedElements = combineWindowedElements(windowsBeingProcessed, windowedElements)
-            val (toBeEmitted, stillBeingProcessed) =
-              combinedWindowedElements.partition(_.window.rangeEnd.isBefore(timestamp))
-            if (tail.isEmpty) LazyList.from(combinedWindowedElements)
-            else LazyList.from(toBeEmitted) #::: loop(stillBeingProcessed, tail)
-        }
-    loop(Seq.empty, as)
+    val windowed = as.scanLeft(WindowingState.empty[A]) { (state, currentWindow) =>
+      val timestamp                = timestampExtractor(currentWindow)
+      val windows                  = Window.windowsContainingTimestamp(slide, size, timestamp)
+      val windowedElements         = windows.map(window => WindowedElement(window, Seq(currentWindow)))
+      val combinedWindowedElements = combineWindowedElements(state.windowsBeingProcessed, windowedElements)
+      val (toBeEmitted, stillBeingProcessed) =
+        combinedWindowedElements.partition(_.window.rangeEnd.isBefore(timestamp))
+      WindowingState(stillBeingProcessed, toBeEmitted)
+    }
+    windowed.flatMap(_.windowsToBeEmitted) #::: LazyList.from(windowed.last.windowsBeingProcessed)
   }
 
   def filterOutDuplicates[A](
@@ -99,7 +104,7 @@ object WindowedElements {
       val maxNumberOfSubsequentWindows = Math.ceil((sizeSec + 1).toDouble / slideSec).toLong // +1 to accomodate for start/end range overlap
       def loop(
         buffer: Queue[WindowedElement[A]],
-        remainingStream: LazyList[WindowedElement[A]]
+        remainingStream: => LazyList[WindowedElement[A]]
       ): LazyList[WindowedElement[A]] =
         if (buffer.isEmpty && remainingStream.isEmpty) LazyList.empty
         else if (buffer.size > maxNumberOfSubsequentWindows || buffer.nonEmpty && remainingStream.isEmpty) {
