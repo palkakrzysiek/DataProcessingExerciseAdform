@@ -1,6 +1,7 @@
 package com.kpalka.dataprocessingexercise
 
 import java.time.{ Duration, LocalDateTime }
+import fs2.{ io, text, Stream }
 
 import com.kpalka.dataprocessingexercise.Window.globalStartTimestamp
 
