@@ -4,7 +4,7 @@ import java.nio.file.Paths
 import java.time.Duration
 
 import cats.effect.{ Blocker, ContextShift, IO, IOApp, Sync }
-import com.kpalka.dataprocessingexercise.WindowedElements._
+import com.kpalka.dataprocessingexercise.lazylist.WindowedElements._
 import fs2.{ io, text, Pipe, Stream }
 
 object Processors {
@@ -28,7 +28,7 @@ object Processors {
 
   def deserializeCsv[A](filename: String, deserializer: Map[String, String] => A, blocker: Blocker)(
     implicit cs: ContextShift[IO]
-  ) =
+  ): Stream[IO, A] =
     io.file
       .readAll[IO](Paths.get(filename), blocker, 4096)
       .through(text.utf8Decode)

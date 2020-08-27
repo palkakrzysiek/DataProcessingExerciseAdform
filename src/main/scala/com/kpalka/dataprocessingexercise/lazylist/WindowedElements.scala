@@ -1,9 +1,8 @@
-package com.kpalka.dataprocessingexercise
+package com.kpalka.dataprocessingexercise.lazylist
 
 import java.time.{ Duration, LocalDateTime }
-import fs2.{ io, text, Stream }
 
-import com.kpalka.dataprocessingexercise.Window.globalStartTimestamp
+import com.kpalka.dataprocessingexercise.lazylist.Window.globalStartTimestamp
 
 import scala.collection.immutable.LazyList.toDeferrer
 import scala.collection.immutable.Queue

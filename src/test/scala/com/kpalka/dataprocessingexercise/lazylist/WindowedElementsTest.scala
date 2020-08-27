@@ -1,4 +1,4 @@
-package com.kpalka.dataprocessingexercise
+package com.kpalka.dataprocessingexercise.lazylist
 
 import java.time.{ Duration, LocalDateTime }
 
@@ -6,7 +6,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 
 class WindowedElementsTest extends AnyFunSuite with Matchers {
-  import WindowedElements._
+  import com.kpalka.dataprocessingexercise.lazylist.WindowedElements._
   def eq[A](x: A, y: A): Boolean = x == y
   test("inner join") {
     innerJoin(LazyList.empty[Int], LazyList(1))(eq) shouldEqual LazyList.empty[Int]
@@ -19,7 +19,7 @@ class WindowedElementsTest extends AnyFunSuite with Matchers {
   val windowSize  = Duration.ofMinutes(1)
   val windowSlide = Duration.ofMinutes(1)
 
-  import Window._
+  import com.kpalka.dataprocessingexercise.lazylist.Window._
   private case class Range(start: LocalDateTime, end: LocalDateTime)
   test("windows containing timestamp") {
     windowsContainingTimestamp(
@@ -40,7 +40,7 @@ class WindowedElementsTest extends AnyFunSuite with Matchers {
     )
   }
 
-  import WindowedElements._
+  import com.kpalka.dataprocessingexercise.lazylist.WindowedElements._
   test("join using sliding windows") {
     val l1 = (LocalDateTime.of(2020, 8, 23, 11, 57, 0), "C") #::
       (LocalDateTime.of(2020, 8, 23, 11, 58, 0), "A") #::
