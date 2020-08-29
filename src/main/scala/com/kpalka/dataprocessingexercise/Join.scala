@@ -1,9 +1,8 @@
-package com.kpalka.dataprocessingexercise.stream
+package com.kpalka.dataprocessingexercise
 
 import java.time.{ Duration, LocalDateTime }
 
-import com.kpalka.dataprocessingexercise.lazylist.{ Window, WindowedElement }
-import fs2.Stream
+import fs2.{ INothing, Pull, Stream }
 
 object Join {}
 
@@ -38,23 +37,35 @@ case class Window(size: Duration, slide: Duration, seqNumber: Long) {
 case class WindowedElement[A](window: Window, elements: Seq[A])
 object WindowedElements {
 
-  def alignWindows[A, B](
-    as: => LazyList[WindowedElement[A]],
-    bs: => LazyList[WindowedElement[B]]
-  ): LazyList[WindowedElement[(Seq[A], Seq[B])]] =
-    if (as.isEmpty || bs.isEmpty) LazyList.empty
-    else
-      (as, bs) match {
-        case (aHead #:: aTail, bHead #:: bTail) =>
-          if (aHead.window.seqNumber < bHead.window.seqNumber) alignWindows(aTail, bs)
-          else if (aHead.window.seqNumber > bHead.window.seqNumber) alignWindows(as, bTail)
-          else WindowedElement(aHead.window, Seq((aHead.elements, bHead.elements))) #:: alignWindows(aTail, bTail)
-      }
+  def alignWindows[F[_], A, B](
+    as: => Stream[F, WindowedElement[A]],
+    bs: => Stream[F, WindowedElement[B]]
+  ): Stream[F, WindowedElement[(Seq[A], Seq[B])]] = {
+    def go(
+      as: => Stream[F, WindowedElement[A]],
+      bs: => Stream[F, WindowedElement[B]]
+    ): Pull[F, WindowedElement[(Seq[A], Seq[B])], Unit] = as.pull.uncons1.flatMap {
+      case Some((ah, at)) =>
+        bs.pull.uncons1.flatMap {
+          case Some((bh, bt)) =>
+            if (ah.window.seqNumber < bh.window.seqNumber) go(at, bs)
+            else if (ah.window.seqNumber > bh.window.seqNumber) go(as, bt)
+            else Pull.output1(WindowedElement(ah.window, Seq((ah.elements, bh.elements)))) >> go(at, bt)
+          // Pull.pure(Some((WindowedElement(ah.window, Seq((ah.elements, bh.elements))), alignWindows(at, bt))))
+          case None => Pull.done
+        }
+      case None => Pull.done
+    }
+    go(as, bs).stream
+  }
 
   def innerJoin[A, B](as: Seq[A], bs: Seq[B])(predicate: (A, B) => Boolean): Seq[(A, B)] =
     as.flatMap(a => bs.filter(b => predicate(a, b)).map(b => (a, b)))
 
-  def combineWindowedElements[A](xs: Seq[WindowedElement[A]], ys: Seq[WindowedElement[A]]): Seq[WindowedElement[A]] =
+  def combineWindowedElements[A](
+    xs: Seq[WindowedElement[A]],
+    ys: Seq[WindowedElement[A]]
+  ): Seq[WindowedElement[A]] =
     (xs ++ ys)
       .groupBy(_.window)
       .map {
@@ -98,10 +109,19 @@ object WindowedElements {
 }
 
 object JoinOps {
+  import WindowedElements._
 
   implicit class JoinOps[F[_], A](as: Stream[F, A]) {
-    def joinUsingSlidingWindow[B](bs: Stream[F, B]): Stream[F, (A, B)] =
+    def joinUsingSlidingWindow[B](bs: Stream[F, B])(
+      asToTimestamp: A => LocalDateTime,
+      bsToTimestamp: B => LocalDateTime,
+      size: Duration,
+      slide: Duration,
+      predicate: (A, B) => Boolean
+    ): Stream[F, (A, B)] = {
+      val asWindowed = toWindowedElements(as)(asToTimestamp, size, slide)
+      val bsWindowed = toWindowedElements(bs)(bsToTimestamp, size, slide)
       ???
-
+    }
   }
 }

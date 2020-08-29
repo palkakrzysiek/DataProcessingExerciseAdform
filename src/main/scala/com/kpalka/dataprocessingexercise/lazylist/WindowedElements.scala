@@ -101,7 +101,7 @@ object WindowedElements {
     val noOverlapPosibility = slideSec > sizeSec
     if (noOverlapPosibility) stream
     else {
-      val maxNumberOfSubsequentWindows = Math.ceil((sizeSec + 1).toDouble / slideSec).toLong // +1 to accomodate for start/end range overlap
+      val maxNumberOfSubsequentWindows = Math.ceil((sizeSec + 1).toDouble / slideSec).toLong // +1 to accommodate for start/end range overlap
       def loop(
         buffer: Queue[WindowedElement[A]],
         remainingStream: => LazyList[WindowedElement[A]]
