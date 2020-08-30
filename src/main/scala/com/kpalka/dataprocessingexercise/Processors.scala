@@ -8,8 +8,8 @@ import com.kpalka.dataprocessingexercise.lazylist.WindowedElements._
 import fs2.{ io, text, Pipe, Stream }
 
 object Processors {
-  private val size  = Duration.ofHours(12)
-  private val slide = Duration.ofHours(12)
+  private val size  = Duration.ofHours(5)
+  private val slide = Duration.ofHours(5)
 
   def viewsWithClicks(views: LazyList[View], clicks: LazyList[Click]): LazyList[ViewWithClick] =
     views
@@ -37,9 +37,11 @@ object Processors {
       .map(deserializer)
 
   def viewsWithClicks2(implicit cs: ContextShift[IO]) = Stream.resource(Blocker[IO]).flatMap { blocker =>
-    deserializeCsv("Views.csv", CsvSeDes.deserializeView, blocker)
-      .zip(deserializeCsv("Clicks.csv", CsvSeDes.deserializeClick, blocker))
-      // TODO continue with reimplementing joinging in fs2
+    val views  = deserializeCsv("Views.csv", CsvSeDes.deserializeView, blocker)
+    val clicks = deserializeCsv("Clicks.csv", CsvSeDes.deserializeClick, blocker)
+    import Join._
+    views
+      .joinUsingSlidingWindow(clicks)(_.logTime, _.logTime, size, slide, _.id == _.interactionId)
       .evalMap(x => IO(println(x)))
   }
 

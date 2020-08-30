@@ -36,25 +36,62 @@ case class WindowedElement[A](window: Window, elements: Seq[A])
 object WindowedElements {
 
   def alignWindows[F[_], A, B](
-    as: => Stream[F, WindowedElement[A]],
-    bs: => Stream[F, WindowedElement[B]]
+    as: Stream[F, WindowedElement[A]],
+    bs: Stream[F, WindowedElement[B]]
   ): Stream[F, WindowedElement[(Seq[A], Seq[B])]] = {
+    // an example of StepLeg loops https://github.com/typelevel/fs2/issues/1678#issuecomment-549569203
     def go(
-      as: => Stream[F, WindowedElement[A]],
-      bs: => Stream[F, WindowedElement[B]]
-    ): Pull[F, WindowedElement[(Seq[A], Seq[B])], Unit] = as.pull.uncons1.flatMap {
-      case Some((ah, at)) =>
-        bs.pull.uncons1.flatMap {
-          case Some((bh, bt)) =>
-            if (ah.window.seqNumber < bh.window.seqNumber) go(at, bs)
-            else if (ah.window.seqNumber > bh.window.seqNumber) go(as, bt)
-            else Pull.output1(WindowedElement(ah.window, Seq((ah.elements, bh.elements)))) >> go(at, bt)
-          // Pull.pure(Some((WindowedElement(ah.window, Seq((ah.elements, bh.elements))), alignWindows(at, bt))))
+      as: Stream.StepLeg[F, WindowedElement[A]],
+      bs: Stream.StepLeg[F, WindowedElement[B]]
+    ): Pull[F, WindowedElement[(Seq[A], Seq[B])], Unit] = {
+      // Stream.emit in `go` invocation guarantees the chunks have one element
+      val ah = as.head(0)
+      val bh = bs.head(0)
+      if (ah.window.seqNumber < bh.window.seqNumber) as.stepLeg.flatMap {
+        case Some(at) => go(at, bs)
+        case None     => Pull.done
+      }
+      else if (ah.window.seqNumber > bh.window.seqNumber) bs.stepLeg.flatMap {
+        case Some(bt) => go(as, bt)
+        case None     => Pull.done
+      }
+      else {
+        Pull.output1(WindowedElement(ah.window, Seq((ah.elements, bh.elements)))) >> as.stepLeg.flatMap {
+          case Some(at) =>
+            bs.stepLeg.flatMap {
+              case Some(bt) => go(at, bt)
+              case None     => Pull.done
+            }
           case None => Pull.done
         }
-      case None => Pull.done
+      }
+
     }
-    go(as, bs).stream
+
+    /**
+     * convenient uncons1 in alignWindows caused <code>
+     * java.lang.RuntimeException: Scope lookup failure!
+     *
+     * This is typically caused by uncons-ing from two or more streams in the same Pull.
+     * To do this safely, use `s.pull.stepLeg` instead of `s.pull.uncons` or a variant
+     * thereof. See the implementation of `Stream#zipWith_` for an example.
+     * </code>
+     *
+     * This makes the code a bit spaghettish
+     *
+     */
+    as.flatMap(Stream.emit)
+      .pull
+      .stepLeg
+      .flatMap {
+        case Some(leg1) =>
+          bs.flatMap(Stream.emit).pull.stepLeg.flatMap {
+            case Some(leg2) => go(leg1, leg2)
+            case None       => Pull.done
+          }
+        case None => Pull.done
+      }
+      .stream
   }
 
   def innerJoin[A, B](as: Seq[A], bs: Seq[B])(predicate: (A, B) => Boolean): Seq[(A, B)] =
