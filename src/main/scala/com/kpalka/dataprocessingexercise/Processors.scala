@@ -36,20 +36,21 @@ object Processors {
       .through(parseCsvWithHeaders)
       .map(deserializer)
 
-  def viewsWithClicks2(implicit cs: ContextShift[IO]) = Stream.resource(Blocker[IO]).flatMap { blocker =>
+  def processViewsWithClicks(implicit cs: ContextShift[IO]) = Stream.resource(Blocker[IO]).flatMap { blocker =>
     val views  = deserializeCsv("Views.csv", CsvSeDes.deserializeView, blocker)
     val clicks = deserializeCsv("Clicks.csv", CsvSeDes.deserializeClick, blocker)
     import Join._
     views
       .joinUsingSlidingWindow(clicks)(_.logTime, _.logTime, size, slide, _.id == _.interactionId)
-      .evalMap(x => IO(println(x)))
-  }
-
-  def processViewsWithClicks = {
-    val views  = IoOps.readCsv("Views.csv").map(CsvSeDes.deserializeView)
-    val clicks = IoOps.readCsv("Clicks.csv").map(CsvSeDes.deserializeClick)
-//    val joined = viewsWithClicks(views, clicks
-//    IoOps.writeLines("ViewsWithClicks.csv", joined.map(CsvSeDes.serializeViewWithClick))
+      .evalTap(x => IO(println(x)))
+      .map {
+        case (view, click) => ViewWithClick(view.id, view.logTime, click.id)
+      }
+      .map(CsvSeDes.serializeViewWithClick)
+      .evalTap(x => IO(println(x)))
+      .intersperse("\n")
+      .through(text.utf8Encode)
+      .through(io.file.writeAll(Paths.get("ViewsWithClicks.csv"), blocker))
   }
 
 }
