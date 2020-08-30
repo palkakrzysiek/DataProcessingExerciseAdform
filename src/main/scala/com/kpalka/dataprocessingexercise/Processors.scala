@@ -3,20 +3,12 @@ package com.kpalka.dataprocessingexercise
 import java.nio.file.Paths
 import java.time.Duration
 
-import cats.effect.{ Blocker, ContextShift, IO, IOApp, Sync }
-import com.kpalka.dataprocessingexercise.lazylist.WindowedElements._
+import cats.effect.{ Blocker, ContextShift, IO }
 import fs2.{ io, text, Pipe, Stream }
 
 object Processors {
   private val size  = Duration.ofHours(5)
   private val slide = Duration.ofHours(5)
-
-  def viewsWithClicks(views: LazyList[View], clicks: LazyList[Click]): LazyList[ViewWithClick] =
-    views
-      .joinUsingSlidingWindows(clicks)(_.logTime, _.logTime, size, slide, _.id == _.interactionId)
-      .map {
-        case (view, click) => ViewWithClick(view.id, view.logTime, click.id)
-      }
 
   def parseCsvWithHeaders[F[_]]: Pipe[F, String, Map[String, String]] = in => {
     val headers  = in.head.map(_.split(","))
@@ -51,6 +43,29 @@ object Processors {
       .intersperse("\n")
       .through(text.utf8Encode)
       .through(io.file.writeAll(Paths.get("ViewsWithClicks.csv"), blocker))
+  }
+
+  def processViewableViews(implicit cs: ContextShift[IO]) = Stream.resource(Blocker[IO]).flatMap { blocker =>
+    val views              = deserializeCsv("Views.csv", CsvSeDes.deserializeView, blocker)
+    val viewableViewEvents = deserializeCsv("ViewableViewEvents.csv", CsvSeDes.deserializeViewableViewEvent, blocker)
+    import Join._
+    views
+      .joinUsingSlidingWindow(viewableViewEvents)(_.logTime, _.logTime, size, slide, _.id == _.interactionId)
+      .evalTap(x => IO(println(x)))
+      .map {
+        case (view, viewableViewEvent) =>
+          ViewableView(
+            viewableViewEvent.id,
+            viewableViewEvent.logTime,
+            viewableViewEvent.interactionId,
+            view.campaignId
+          )
+      }
+      .map(CsvSeDes.serializeViewableView)
+      .evalTap(x => IO(println(x)))
+      .intersperse("\n")
+      .through(text.utf8Encode)
+      .through(io.file.writeAll(Paths.get("ViewableViews.csv"), blocker))
   }
 
 }
