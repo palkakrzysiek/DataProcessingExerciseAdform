@@ -2,9 +2,7 @@ package com.kpalka.dataprocessingexercise
 
 import java.time.{ Duration, LocalDateTime }
 
-import fs2.{ INothing, Pull, Stream }
-
-object Join {}
+import fs2.{ Pull, Stream }
 
 object Window {
   val globalStartTimestamp: LocalDateTime = LocalDateTime.of(2010, 1, 1, 0, 0)
@@ -108,8 +106,14 @@ object WindowedElements {
   }
 }
 
-object JoinOps {
+object Join {
   import WindowedElements._
+
+  def filterOutDuplicates[F[_], A, B](s: Stream[F, WindowedElement[(A, B)]]): Stream[F, WindowedElement[(A, B)]] =
+    s.zipWithPrevious.map {
+      case (None, first)      => first
+      case (Some(prev), curr) => WindowedElement(curr.window, curr.elements.filterNot(prev.elements.contains))
+    }.filter(_.elements.nonEmpty)
 
   implicit class JoinOps[F[_], A](as: Stream[F, A]) {
     def joinUsingSlidingWindow[B](bs: Stream[F, B])(
@@ -121,7 +125,15 @@ object JoinOps {
     ): Stream[F, (A, B)] = {
       val asWindowed = toWindowedElements(as)(asToTimestamp, size, slide)
       val bsWindowed = toWindowedElements(bs)(bsToTimestamp, size, slide)
-      ???
+      val aligned    = alignWindows(asWindowed, bsWindowed)
+      val joined = aligned.map {
+        case WindowedElement(window, elem) =>
+          elem.head match {
+            case (as, bs) => WindowedElement(window, innerJoin(as, bs)(predicate))
+          }
+      }
+      filterOutDuplicates(joined)
+        .flatMap(windowedElement => Stream.emits(windowedElement.elements))
     }
   }
 }
