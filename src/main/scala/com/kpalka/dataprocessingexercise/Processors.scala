@@ -28,9 +28,11 @@ object Processors {
       .through(parseCsvWithHeaders)
       .map(deserializer)
 
-  def processViewsWithClicks(implicit cs: ContextShift[IO]) = Stream.resource(Blocker[IO]).flatMap { blocker =>
-    val views  = deserializeCsv("Views.csv", CsvSeDes.deserializeView, blocker)
-    val clicks = deserializeCsv("Clicks.csv", CsvSeDes.deserializeClick, blocker)
+  def processViewsWithClicks(viewsFilename: String, clicksFilename: String, viewsWithClicksFilename: String)(
+    implicit cs: ContextShift[IO]
+  ) = Stream.resource(Blocker[IO]).flatMap { blocker =>
+    val views  = deserializeCsv(viewsFilename, CsvSeDes.deserializeView, blocker)
+    val clicks = deserializeCsv(clicksFilename, CsvSeDes.deserializeClick, blocker)
     import Join._
     views
       .joinUsingSlidingWindow(clicks)(_.logTime, _.logTime, size, slide, _.id == _.interactionId)
@@ -42,12 +44,14 @@ object Processors {
       .evalTap(x => IO(println(x)))
       .intersperse("\n")
       .through(text.utf8Encode)
-      .through(io.file.writeAll(Paths.get("ViewsWithClicks.csv"), blocker))
+      .through(io.file.writeAll(Paths.get(viewsWithClicksFilename), blocker))
   }
 
-  def processViewableViews(implicit cs: ContextShift[IO]) = Stream.resource(Blocker[IO]).flatMap { blocker =>
-    val views              = deserializeCsv("Views.csv", CsvSeDes.deserializeView, blocker)
-    val viewableViewEvents = deserializeCsv("ViewableViewEvents.csv", CsvSeDes.deserializeViewableViewEvent, blocker)
+  def processViewableViews(viewsFilename: String, viewableViewEventsFilename: String, viewableViewsFilename: String)(
+    implicit cs: ContextShift[IO]
+  ) = Stream.resource(Blocker[IO]).flatMap { blocker =>
+    val views              = deserializeCsv(viewsFilename, CsvSeDes.deserializeView, blocker)
+    val viewableViewEvents = deserializeCsv(viewableViewEventsFilename, CsvSeDes.deserializeViewableViewEvent, blocker)
     import Join._
     views
       .joinUsingSlidingWindow(viewableViewEvents)(_.logTime, _.logTime, size, slide, _.id == _.interactionId)
@@ -65,7 +69,7 @@ object Processors {
       .evalTap(x => IO(println(x)))
       .intersperse("\n")
       .through(text.utf8Encode)
-      .through(io.file.writeAll(Paths.get("ViewableViews.csv"), blocker))
+      .through(io.file.writeAll(Paths.get(viewableViewsFilename), blocker))
   }
 
 }
