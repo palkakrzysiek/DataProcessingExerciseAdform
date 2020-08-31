@@ -72,4 +72,23 @@ object Processors {
       .through(io.file.writeAll(Paths.get(viewableViewsFilename), blocker))
   }
 
+  private def sumBy[F[_], A, B](stream: Stream[F, A])(by: A => B): Stream[F, Map[B, Int]] =
+    stream.fold(Map.empty[B, Int]) {
+      case (acc, elem) =>
+        val newCounter = acc.getOrElse(by(elem), 0) + 1
+        acc + (by(elem) -> newCounter)
+    }
+
+  def processStatistics(viewsFilename: String, clicksFilename: String, viewableViewsFilename: String)(
+    implicit cs: ContextShift[IO]
+  ) =
+    Stream.resource(Blocker[IO]).flatMap { blocker =>
+      val views                   = deserializeCsv(viewsFilename, CsvSeDes.deserializeView, blocker)
+      val clicks                  = deserializeCsv(clicksFilename, CsvSeDes.deserializeClick, blocker)
+      val viewableViews           = deserializeCsv(viewableViewsFilename, CsvSeDes.deserializeViewableView, blocker)
+      val viewsByCampaign         = sumBy(views)(_.campaignId)
+      val clicksByCampaign        = sumBy(clicks)(_.campaignId)
+      val viewableViewsByCampaign = sumBy(viewableViews)(_.campaignId)
+    }
+
 }

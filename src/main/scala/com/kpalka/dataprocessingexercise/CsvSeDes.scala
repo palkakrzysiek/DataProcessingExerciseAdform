@@ -24,7 +24,16 @@ object CsvSeDes {
       logTime = LocalDateTime.parse(entry("logtime"), dateFormatter),
       interactionId = entry("interactionid").toLong
     )
+  def deserializeViewableView(entry: Map[String, String]): ViewableView =
+    ViewableView(
+      id = entry("id").toLong,
+      logTime = LocalDateTime.parse(entry("logtime"), dateFormatter),
+      interactionId = entry("interactionid").toLong,
+      campaignId = entry("campaignid").toLong
+    )
   def serializeViewWithClick(v: ViewWithClick): String = s"${v.id},${v.logTime.format(dateFormatter)},${v.clickId}"
+  val viewWithClickHeader                              = "id,logtime,clickid"
   def serializeViewableView(v: ViewableView): String =
     s"${v.id},${v.logTime.format(dateFormatter)},${v.interactionId},${v.campaignId}"
+  val viewableViewHeader = "id,logtime,interactionid,campaignid"
 }
